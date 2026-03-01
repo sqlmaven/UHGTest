@@ -1,0 +1,245 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "actions": {
+            "Get_HL7": {
+                "type": "ServiceProvider",
+                "inputs": {
+                    "parameters": {
+                        "filePath": "test.hl7",
+                        "inferContentType": false
+                    },
+                    "serviceProviderConfiguration": {
+                        "connectionName": "Sftp",
+                        "operationId": "getFileContent",
+                        "serviceProviderId": "/serviceProviders/Sftp"
+                    }
+                },
+                "runAfter": {}
+            },
+            "Initialize_variables": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "HL7Text",
+                            "type": "string",
+                            "value": "@{base64ToString(body('Get_HL7')?['content']?['$content'])}"
+                        },
+                        {
+                            "name": "varErrors",
+                            "type": "integer",
+                            "value": 0
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Get_HL7": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Decode_HL7": {
+                "type": "HL7Decode",
+                "inputs": {
+                    "messageToDecode": "@variables('HL7Text')"
+                },
+                "runAfter": {
+                    "Initialize_variables": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Transform_XML": {
+                "type": "Xslt",
+                "inputs": {
+                    "content": "@variables('varEnvelope')",
+                    "map": {
+                        "source": "LogicApp",
+                        "name": "test2.xslt"
+                    },
+                    "transformOptions": "GenerateTextOutput"
+                },
+                "runAfter": {
+                    "Initialize_variables_2": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Upload_JSON": {
+                "type": "ServiceProvider",
+                "inputs": {
+                    "parameters": {
+                        "filePath": "test.json",
+                        "overWriteFileIfExists": true,
+                        "content": "@json(string(variables('varOutput')))"
+                    },
+                    "serviceProviderConfiguration": {
+                        "connectionName": "Sftp",
+                        "operationId": "uploadFileContent",
+                        "serviceProviderId": "/serviceProviders/Sftp"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variables_3": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Initialize_variables_1": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "varAdt",
+                            "type": "string",
+                            "value": "@{body('Decode_HL7')['messageContent']}"
+                        },
+                        {
+                            "name": "varHeader",
+                            "type": "string",
+                            "value": "@{body('Decode_HL7')['headerContent']}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Decode_HL7": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Initialize_variables_2": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "varEnvelope",
+                            "type": "string",
+                            "value": "@{concat(  '<Envelope>',  variables('varHeader'),  variables('varAdt'),  '</Envelope>')}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_variables_1": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Initialize_variables_3": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "varOutput",
+                            "type": "string",
+                            "value": "@{json(xml(body('Transform_XML')))['root']}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Transform_XML": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Upload_JSON-copy": {
+                "type": "ServiceProvider",
+                "inputs": {
+                    "parameters": {
+                        "filePath": "test.error",
+                        "overWriteFileIfExists": true,
+                        "content": "@variables('varError')"
+                    },
+                    "serviceProviderConfiguration": {
+                        "connectionName": "Sftp",
+                        "operationId": "uploadFileContent",
+                        "serviceProviderId": "/serviceProviders/Sftp"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variables_4": [
+                        "SUCCEEDED"
+                    ]
+                }
+            },
+            "Initialize_variables_4": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "varError",
+                            "type": "string",
+                            "value": "@{actions('Decode_HL7')?['error']?['message']}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Decode_HL7": [
+                        "TIMEDOUT",
+                        "SKIPPED",
+                        "FAILED"
+                    ]
+                }
+            },
+            "Condition": {
+                "type": "If",
+                "expression": {
+                    "and": [
+                        {
+                            "greater": [
+                                "@length(coalesce(body('Decode_HL7')?['errors'], json('[]')))",
+                                0
+                            ]
+                        }
+                    ]
+                },
+                "actions": {
+                    "Set_variable": {
+                        "type": "SetVariable",
+                        "inputs": {
+                            "name": "varErrors",
+                            "value": "@length(coalesce(body('Decode_HL7')?['errors'], json('[]')))"
+                        }
+                    },
+                    "Upload_file_content": {
+                        "type": "ServiceProvider",
+                        "inputs": {
+                            "parameters": {
+                                "filePath": "test.msg",
+                                "overWriteFileIfExists": true,
+                                "content": "@first(coalesce(body('Decode_HL7')?['errors'], json('[]')))"
+                            },
+                            "serviceProviderConfiguration": {
+                                "connectionName": "Sftp",
+                                "operationId": "uploadFileContent",
+                                "serviceProviderId": "/serviceProviders/Sftp"
+                            }
+                        },
+                        "runAfter": {
+                            "Set_variable": [
+                                "SUCCEEDED"
+                            ]
+                        }
+                    }
+                },
+                "else": {
+                    "actions": {}
+                },
+                "runAfter": {
+                    "Upload_JSON": [
+                        "SUCCEEDED"
+                    ]
+                }
+            }
+        },
+        "outputs": {},
+        "triggers": {
+            "When_an_HTTP_request_is_received": {
+                "type": "Request",
+                "kind": "Http"
+            }
+        }
+    },
+    "kind": "Stateful"
+}

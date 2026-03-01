@@ -1,0 +1,18 @@
+{
+  "serviceProviderConnections": {
+    "Sftp": {
+      "parameterValues": {
+        "disableConnectionCache": "@appsetting('Sftp_disableConnectionCache')",
+        "sshHostAddress": "@appsetting('Sftp_sshHostAddress')",
+        "username": "@appsetting('Sftp_username')",
+        "password": "@appsetting('Sftp_password')",
+        "rootDirectory": "@appsetting('Sftp_rootDirectory')"
+      },
+      "serviceProvider": {
+        "id": "/serviceProviders/Sftp"
+      },
+      "displayName": "RVPS1"
+    }
+  },
+  "managedApiConnections": {}
+}
